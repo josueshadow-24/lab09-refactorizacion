@@ -105,10 +105,10 @@ const ubicacionAlmacen = [-12.0853, -77.0346];
 // ============================================================
 
 // Une todas las listas de productos en un solo catálogo
-const obtenerCatalogo = () => productosLaptops.concat(productosAccesorios).concat(productosMonitores);
+const obtenerCatalogo = () => [...productosLaptops, ...productosAccesorios, ...productosMonitores];
 
 // Combina la configuración por defecto con la del usuario
-const obtenerConfiguracion = () => Object.assign({}, configuracionPorDefecto, configuracionUsuario);
+const obtenerConfiguracion = () => ({ ...configuracionPorDefecto, ...configuracionUsuario });
 
 // Da formato a un monto. Si no se envía moneda o decimales, usa valores por defecto
 const formatearPrecio = (monto, moneda = 'S/', decimales = 2) => `${moneda} ${monto.toFixed(decimales)}`;
@@ -123,46 +123,20 @@ const calcularDescuento = (precio, porcentaje = 0) => {
 const calcularPrecioConIGV = (precio, igv = 0.18) => precio + (precio * igv);
 
 // Devuelve un texto con la información de un producto
-const describirProducto = (producto) => {
-  const nombre = producto.nombre;
-  const precio = producto.precio;
-  const stock = producto.stock;
-  const categoria = producto.categoria;
-
+const describirProducto = ({ nombre, precio, stock, categoria }) => {
   const estado = stock > 0 ? `Disponible (${stock} und.)` : 'AGOTADO';
   return `[${categoria}] ${nombre} - ${formatearPrecio(precio)} - ${estado}`;
 };
 
 // Devuelve el nombre completo y la ciudad de un cliente
-const resumenCliente = (cliente) => {
-  const nombres = cliente.nombres;
-  const apellidos = cliente.apellidos;
-  const email = cliente.email;
-  const distrito = cliente.direccion.distrito;
-  const ciudad = cliente.direccion.ciudad;
-
-  return `${nombres} ${apellidos} <${email}> - ${distrito}, ${ciudad}`;
-};
+const resumenCliente = ({ nombres, apellidos, email, direccion: { distrito, ciudad } }) => 
+  `${nombres} ${apellidos} <${email}> - ${distrito}, ${ciudad}`;
 
 // Busca un producto por su id
-const buscarProductoPorId = (catalogo, id) => {
-  for (let i = 0; i < catalogo.length; i++) {
-    if (catalogo[i].id === id) {
-      return catalogo[i];
-    }
-  }
-  return null;
-};
+const buscarProductoPorId = (catalogo, id) => catalogo.find((producto) => producto.id === id) || null;
 
 // Busca un cliente por su id
-const buscarClientePorId = (listaClientes, id) => {
-  for (let i = 0; i < listaClientes.length; i++) {
-    if (listaClientes[i].id === id) {
-      return listaClientes[i];
-    }
-  }
-  return null;
-};
+const buscarClientePorId = (listaClientes, id) => listaClientes.find((cliente) => cliente.id === id) || null;
 
 // Filtra productos por categoría
 const filtrarPorCategoria = (catalogo, categoria) => 
@@ -170,71 +144,66 @@ const filtrarPorCategoria = (catalogo, categoria) =>
 
 // Devuelve solo los productos con stock disponible
 const productosDisponibles = (catalogo) => 
-  catalogo.filter((producto) => producto.stock > 0);
+  catalogo.filter(({ stock }) => stock > 0);
 
 // Devuelve una lista con los nombres de los productos
 const listarNombres = (catalogo) => 
-  catalogo.map((producto) => producto.nombre);
+  catalogo.map(({ nombre }) => nombre);
 
 // Suma una cantidad indefinida de números (usa "arguments")
-const sumarMontos = function () {
-  let total = 0;
-  for (let i = 0; i < arguments.length; i++) {
-    total += arguments[i];
-  }
-  return total;
-};
+const sumarMontos = (...montos) => montos.reduce((total, monto) => total + monto, 0);
 
 // Registra un mensaje con varias etiquetas (usa "arguments")
-const registrarEvento = function (tipo) {
-  const etiquetas = Array.prototype.slice.call(arguments, 1);
+const registrarEvento = (tipo, ...etiquetas) => {
   console.log(`[${tipo.toUpperCase()}] ${etiquetas.join(' | ')}`);
 };
 
 // Actualiza el stock de un producto creando un objeto nuevo
-const actualizarProducto = (producto, cambios) => Object.assign({}, producto, cambios);
+const actualizarProducto = (producto, cambios) => ({ ...producto, ...cambios });
 
 // Calcula el detalle y total de un pedido
 const calcularPedido = (pedidoActual, catalogo, porcentajeDescuento = 0) => {
+  const { codigo, items } = pedidoActual;
   const config = obtenerConfiguracion();
   const detalle = [];
   const subtotales = [];
 
-  for (let i = 0; i < pedidoActual.items.length; i++) {
-    const item = pedidoActual.items[i];
-    const producto = buscarProductoPorId(catalogo, item.productoId);
-    const subtotal = producto.precio * item.cantidad;
+  for (const item of items) {
+    const { productoId, cantidad } = item;
+    const producto = buscarProductoPorId(catalogo, productoId);
+    const subtotal = producto.precio * cantidad;
 
-    detalle.push(`${item.cantidad} x ${producto.nombre} = ${formatearPrecio(subtotal, config.moneda)}`);
+    detalle.push(`${cantidad} x ${producto.nombre} = ${formatearPrecio(subtotal, config.moneda)}`);
     subtotales.push(subtotal);
   }
 
-  const subtotalGeneral = sumarMontos.apply(null, subtotales);
+  const subtotalGeneral = sumarMontos(...subtotales);
   const conDescuento = calcularDescuento(subtotalGeneral, porcentajeDescuento);
   const total = calcularPrecioConIGV(conDescuento, config.igv);
 
   return {
-    codigo: pedidoActual.codigo,
-    detalle: detalle,
+    codigo,
+    detalle,
     subtotal: subtotalGeneral,
     descuento: porcentajeDescuento,
-    total: total
+    total
   };
 };
 
 // Obtiene el producto más caro y el más barato
 const obtenerExtremos = (catalogo) => {
-  const ordenados = catalogo.slice().sort((a, b) => b.precio - a.precio);
+  const ordenados = [...catalogo].sort((a, b) => b.precio - a.precio);
   return [ordenados[0], ordenados[ordenados.length - 1]];
 };
 
 // ============================================================
 //  PROGRAMA PRINCIPAL
 // ============================================================
+const { nombre: nombreTienda, ruc, direccion: { calle, distrito: distritoTienda, ciudad: ciudadTienda } } = tienda;
 
 console.log('==============================================');
-console.log(`  ${tienda.nombre} - RUC ${tienda.ruc}`);
-console.log(`  ${tienda.direccion.calle}, ${tienda.direccion.distrito} - ${tienda.direccion.ciudad}`);
+console.log(`  ${nombreTienda} - RUC ${ruc}`);
+console.log(`  ${calle}, ${distritoTienda} - ${ciudadTienda}`);
 console.log('==============================================');
 
 // 1. Configuración
@@ -245,9 +214,7 @@ console.log(config);
 // 2. Catálogo completo
 const catalogo = obtenerCatalogo();
 console.log(`\n--- 2. Catálogo completo (${catalogo.length} productos) ---`);
-for (let i = 0; i < catalogo.length; i++) {
-  console.log(describirProducto(catalogo[i]));
-}
+catalogo.forEach((prod) => console.log(describirProducto(prod)));
 
 // 3. Filtros
 console.log('\n--- 3. Filtros ---');
@@ -255,18 +222,14 @@ console.log('Monitores:', listarNombres(filtrarPorCategoria(catalogo, 'Monitores
 console.log(`Con stock: ${productosDisponibles(catalogo).length} de ${catalogo.length}`);
 
 // 4. Producto más caro y más barato (acceso por índice)
-const extremos = obtenerExtremos(catalogo);
-const masCaro = extremos[0];
-const masBarato = extremos[1];
+const [masCaro, masBarato] = obtenerExtremos(catalogo);
 console.log('\n--- 4. Extremos de precio ---');
 console.log(`Más caro   : ${masCaro.nombre} (${formatearPrecio(masCaro.precio)})`);
 console.log(`Más barato : ${masBarato.nombre} (${formatearPrecio(masBarato.precio)})`);
 
 // 5. Clientes
 console.log('\n--- 5. Clientes registrados ---');
-for (let j = 0; j < clientes.length; j++) {
-  console.log(`${j + 1}. ${resumenCliente(clientes[j])}`);
-}
+clientes.forEach((cli, index) => console.log(`${index + 1}. ${resumenCliente(cli)}`));
 
 // 6. Descuentos y formatos (prueba de valores por defecto)
 console.log('\n--- 6. Descuentos y formatos ---');
@@ -283,9 +246,7 @@ const resultado = calcularPedido(pedido, catalogo, descuentoCliente);
 
 console.log(`Pedido : ${resultado.codigo}`);
 console.log(`Cliente: ${cliente.nombres} ${cliente.apellidos} (${cliente.tipo})`);
-for (let k = 0; k < resultado.detalle.length; k++) {
-  console.log(`  - ${resultado.detalle[k]}`);
-}
+resultado.detalle.forEach((linea) => console.log(`  - ${linea}`));
 console.log(`Subtotal          : ${formatearPrecio(resultado.subtotal)}`);
 console.log(`Descuento aplicado: ${resultado.descuento}%`);
 console.log(`Total (con IGV)   : ${formatearPrecio(resultado.total)}`);
@@ -302,8 +263,7 @@ console.log('\n--- 9. Suma de montos variables ---');
 console.log(`Ventas del día: ${formatearPrecio(sumarMontos(1200, 350.5, 89.9, 2499.9))}`);
 
 // 10. Ubicación del almacén (acceso por índice a un arreglo)
-const latitud = ubicacionAlmacen[0];
-const longitud = ubicacionAlmacen[1];
+const [latitud, longitud] = ubicacionAlmacen;
 console.log('\n--- 10. Ubicación del almacén ---');
 console.log(`Latitud: ${latitud} | Longitud: ${longitud}`);
 
